@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>FS 020 Reaction Diffusion</title>
+		<style>
+			body { margin: 0; }
+			canvas {
+                width: 100%;
+                height: 100%;
+                image-rendering: pixelated;
+            }
+		</style>
+        
+        <script id="fragmentShader" type="x-shader/x-fragment">
+            #define M_PI 3.1415926535897932384626433832795
+            
+			uniform float time;
+			uniform float dt;
+			uniform vec2 resolution;
+			uniform sampler2D tPrev;
+            uniform int randomStart;
+            uniform float randomSeed;
+            uniform float feed;
+            uniform float kill;
+            uniform vec2 diff;
+
+			varying vec2 vUv;
+            
+            //
+            // utils
+            //
+            vec2 normalizedPosition()
+            {
+                return -1.0 + 2.0 * vUv;
+            }
+            
+            float rand(vec2 co){
+                return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+            }
+            
+            //
+            // scene
+            //
+            vec2 initialize(vec2 p)
+            {
+                if (randomStart == 1)
+                {
+                    // ランダムスタート
+                    float r = rand(gl_FragCoord.xy + vec2(randomSeed, randomSeed));
+                    if (1.0 <= floor(0.01 + r))
+                        return vec2(0.0, 0.9);
+                }
+                else
+                {
+                    // 左下に一つ点を置く
+                    vec2 d = (vUv - vec2(0.0)) * resolution;
+                    float dist = dot(d, d);
+                    if(dist < 8.0)
+                        return vec2(0.0, 0.9);
+                }
+                
+                return vec2(1.0, 0.0);
+                
+            }
+            
+            vec2 loop(vec2 p)
+            {
+                return vec2(mod(p.x, 1.0), mod(p.y, 1.0));
+            }
+            
+            vec2 laplacian(vec2 uv)
+            {
+                vec2 d = 1.0 / resolution;
+                
+                vec2 uv1 = texture2D(tPrev, vUv + vec2( 0.0,  d.y)).zy;
+                vec2 uv2 = texture2D(tPrev, vUv + vec2( 0.0, -d.y)).zy;
+                vec2 uv3 = texture2D(tPrev, vUv + vec2( d.x,  0.0)).zy;
+                vec2 uv4 = texture2D(tPrev, vUv + vec2(-d.x,  0.0)).zy;
+                vec2 uv5 = texture2D(tPrev, vUv + vec2( d.x,  d.y)).zy;
+                vec2 uv6 = texture2D(tPrev, vUv + vec2( d.x, -d.y)).zy;
+                vec2 uv7 = texture2D(tPrev, vUv + vec2(-d.x,  d.y)).zy;
+                vec2 uv8 = texture2D(tPrev, vUv + vec2(-d.x, -d.y)).zy;
+                
+                return (
+                    + 0.2 * (uv1 + uv2 + uv3 + uv4)
+                    + 0.05 * (uv5 + uv6 + uv7 + uv8)
+                    - uv
+                    );
+            }
+            
+            vec2 calc()
+            {
+                vec2 uv  = texture2D(tPrev, vUv).zy;
+                
+                float k = vUv.x * 0.1;
+                float f = vUv.y * 0.25;
+                
+                float ab2 = uv.x * uv.y * uv.y;
+                vec2 d_uv = vec2(
+                    - ab2 + f * (1.0 - uv.x),
+                    + ab2 - (k + f) * uv.y
+                    );
+                return uv + (d_uv + diff * laplacian(uv)) * dt;
+            }
+            
+            //
+            // main
+            //
+			void main()
+            {
+                if (time < 0.1)
+                {
+                    vec2 init = initialize(normalizedPosition());
+                    gl_FragColor = vec4( 0.0, init.y, init.x, 1.0 );
+                }
+                else
+                {
+                    vec2 l = calc();
+                    gl_FragColor = vec4(0.0, l.y, l.x, 1.0);
+                }
+			}
+        </script>
+
+        <script id="vertexShader" type="x-shader/x-fragment">
+            varying vec2 vUv;
+            
+            void main()
+            {
+                vUv = uv;
+                vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        </script>
+	</head>
+	<body>
+		<p>
+			<input id="buttonReset" type="button" value="Reset" onclick="onButtonResetClick()">
+			<input id="buttonRandom" type="button" value="Random" onclick="onButtonRandomClick()">
+			<input id="buttonStop" type="button" value="Stop" onclick="onButtonStopClick()">
+            / <span id="spanPosition"></span>
+		</p>
+        <p>
+            Diffusion A <input id="numberDiffA" type="number" value="0.5" min="0.0" max="1.0" step="0.001" oninput="onInputNumberDiffA(this.value)">
+            / Diffusion B <input id="numberDiffB" type="number" value="0.25" min="0.0" max="1.0" step="0.001" oninput="onInputNumberDiffB(this.value)">
+            / ΔTime <input id="numberDeltaTime" type="number" value="0.8" min="0.0" max="1.0" step="0.001" oninput="onInputNumberDeltaTime(this.value)">
+        </p>
+        
+        <script src="js/three.min.js"></script>
+        <script src="js/scene K-F Plot.js"></script>
+	</body>
+</html>
